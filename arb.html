@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Surprise For You</title>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --gold:#f3d58a; --ember:#ff9a3c; --deep:#050b16; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; background:var(--deep); overflow:hidden; font-family:'Cinzel',Georgia,serif; color:var(--gold); }
+  canvas { position:fixed; inset:0; display:block; }
+  .vignette { position:fixed; inset:0; pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 45%, rgba(2,5,12,.85) 100%); }
+  .layer { position:fixed; left:0; right:0; text-align:center; padding:0 20px; pointer-events:none; }
+  #intro { top:50%; transform:translateY(-50%); font-size:clamp(22px,4.5vw,46px); letter-spacing:.18em;
+    text-shadow:0 0 24px rgba(255,170,70,.55); opacity:0; transition:opacity 1.8s ease; }
+  #intro.show { opacity:1; }
+  #hint { bottom:9%; font-size:clamp(11px,1.6vw,15px); letter-spacing:.35em; color:#9fc3e8; opacity:0;
+    transition:opacity 1.5s ease; animation:pulse 2.4s ease-in-out infinite; }
+  #hint.show { opacity:.85; }
+  @keyframes pulse { 50% { filter:brightness(.55); } }
+  #reveal { top:7%; opacity:0; transform:translateY(14px); transition:opacity 1.6s ease, transform 1.6s ease; }
+  #reveal.show { opacity:1; transform:none; pointer-events:auto; }
+  #reveal h1 { font-weight:600; font-size:clamp(18px,3.6vw,38px); line-height:1.45; letter-spacing:.06em;
+    text-shadow:0 0 22px rgba(255,190,90,.6), 0 2px 8px #000; max-width:820px; margin:0 auto 22px; }
+  .btn { display:inline-block; pointer-events:auto; text-decoration:none; color:#1a0f02; font-weight:600;
+    letter-spacing:.14em; font-size:clamp(12px,1.8vw,16px); padding:14px 30px; border-radius:4px;
+    background:linear-gradient(180deg,#ffe3a0,#e0a346); border:1px solid #fff1c8;
+    box-shadow:0 0 28px rgba(255,160,60,.55), inset 0 0 8px rgba(255,255,255,.4);
+    transition:transform .2s, box-shadow .2s; }
+  .btn:hover { transform:translateY(-2px) scale(1.04); box-shadow:0 0 44px rgba(255,170,70,.9), inset 0 0 8px rgba(255,255,255,.5); }
+</style>
+</head>
+<body>
+<div class="vignette"></div>
+<div id="intro" class="layer">I have a surprise for u...</div>
+<div id="hint" class="layer">TOUCH THE GIFT</div>
+<div id="reveal" class="layer">
+  <h1>I made a little game for you on your birthday!</h1>
+  <a class="btn" href="https://drive.google.com/drive/folders/1_fEGIyL5yArdpkNC1SMxXqSLCP54Fsg2?usp=sharing" target="_blank" rel="noopener">DOWNLOAD NOW FOR PC / LAPTOP</a>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050b16);
+  scene.fog = new THREE.FogExp2(0x07142a, 0.028);
+
+  const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 200);
+  camera.position.set(0, 2.3, 8);
+  const lookTarget = new THREE.Vector3(0, 1.0, 0);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.prepend(renderer.domElement);
+
+  /* ---------- lights ---------- */
+  scene.add(new THREE.AmbientLight(0x2a4a7a, 0.55));
+  const moonLight = new THREE.DirectionalLight(0x9cc4ff, 0.9);
+  moonLight.position.set(-6, 9, -10);
+  scene.add(moonLight);
+
+  /* ---------- helpers ---------- */
+  function glowTexture(inner, outer) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gr.addColorStop(0, inner); gr.addColorStop(1, outer);
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+
+  /* ---------- moon ---------- */
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(2, 32, 32),
+    new THREE.MeshBasicMaterial({ color: 0xe8f1ff, fog: false })
+  );
+  moon.position.set(-9, 10, -45);
+  scene.add(moon);
+  const moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(170,205,255,0.8)', 'rgba(170,205,255,0)'),
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  moonGlow.scale.set(26, 26, 1);
+  moonGlow.position.copy(moon.position);
+  scene.add(moonGlow);
+
+  /* moon path on the water */
+  const pathCanvas = document.createElement('canvas'); pathCanvas.width = 64; pathCanvas.height = 256;
+  { const g = pathCanvas.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, 'rgba(180,215,255,0)'); gr.addColorStop(1, 'rgba(180,215,255,0.5)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256); }
+  const moonPath = new THREE.Mesh(
+    new THREE.PlaneGeometry(9, 42),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pathCanvas), transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  moonPath.rotation.x = -Math.PI / 2;
+  moonPath.position.set(-4.5, -1.35, -24);
+  moonPath.rotation.z = 0.0;
+  scene.add(moonPath);
+
+  /* stars */
+  { const n = 500, p = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, r = 70 + Math.random() * 20;
+      p[i*3] = Math.cos(a) * r; p[i*3+1] = 4 + Math.random() * 45; p[i*3+2] = -Math.abs(Math.sin(a)) * r - 10;
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xcfe2ff, size: 0.35, fog: false, transparent: true, opacity: .8 })));
+  }
+
+  /* ---------- ocean ---------- */
+  const oceanGeo = new THREE.PlaneGeometry(120, 120, 70, 70);
+  oceanGeo.rotateX(-Math.PI / 2);
+  const oceanBase = oceanGeo.attributes.position.array.slice();
+  const ocean = new THREE.Mesh(oceanGeo, new THREE.MeshStandardMaterial({
+    color: 0x0a3a66, metalness: 0.5, roughness: 0.28, flatShading: true }));
+  ocean.position.y = -1.4;
+  scene.add(ocean);
+
+  /* ---------- pedestal ---------- */
+  const stone = new THREE.MeshStandardMaterial({ color: 0x2a3140, roughness: 0.95 });
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(2.7, 3.1, 1.6, 10), stone);
+  pedestal.position.y = -0.8;
+  scene.add(pedestal);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(2.7, 0.07, 6, 10), new THREE.MeshStandardMaterial({ color: 0x3a4660, roughness: .8 }));
+  rim.rotation.x = Math.PI / 2; rim.rotation.z = Math.PI / 10; rim.position.y = 0;
+  scene.add(rim);
+
+  /* ---------- torches ---------- */
+  const flameTex = glowTexture('rgba(255,235,170,1)', 'rgba(255,110,20,0)');
+  const torches = [];
+  [-2.0, 2.0].forEach((x, i) => {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.7, 8),
+      new THREE.MeshStandardMaterial({ color: 0x2b1a10, roughness: 1 }));
+    pole.position.set(x, 0.85, -0.5);
+    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.1, 0.25, 10),
+      new THREE.MeshStandardMaterial({ color: 0x15100c, metalness: .6, roughness: .5 }));
+    cup.position.set(x, 1.75, -0.5);
+    const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: flameTex, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flame.position.set(x, 2.05, -0.5);
+    const light = new THREE.PointLight(0xff8a30, 2.2, 14, 1.6);
+    light.position.set(x, 2.05, -0.2);
+    scene.add(pole, cup, flame, light);
+    torches.push({ flame, light, seed: i * 10 });
+  });
+
+  /* ---------- gift box ---------- */
+  const gift = new THREE.Group();
+  gift.position.y = 0;
+  scene.add(gift);
+
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x6e1630, roughness: 0.55, metalness: 0.15 });
+  const ribMat = new THREE.MeshStandardMaterial({ color: 0xd9a845, roughness: 0.3, metalness: 0.85, emissive: 0x3a2400 });
+
+  const body = new THREE.Group(); gift.add(body);
+  const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.25, 1.7), boxMat);
+  bodyMesh.position.y = 0.625; body.add(bodyMesh);
+  const r1 = new THREE.Mesh(new THREE.BoxGeometry(0.34, 1.26, 1.72), ribMat); r1.position.y = 0.625; body.add(r1);
+  const r2 = new THREE.Mesh(new THREE.BoxGeometry(1.72, 1.26, 0.34), ribMat); r2.position.y = 0.625; body.add(r2);
+
+  const lid = new THREE.Group();
+  lid.position.y = 1.25; gift.add(lid);
+  const lidMesh = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.42, 1.95), boxMat);
+  lidMesh.position.y = 0.21; lid.add(lidMesh);
+  const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.43, 1.97), ribMat); l1.position.y = 0.21; lid.add(l1);
+  const l2 = new THREE.Mesh(new THREE.BoxGeometry(1.97, 0.43, 0.34), ribMat); l2.position.y = 0.21; lid.add(l2);
+  [-1, 1].forEach(s => {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.07, 10, 24), ribMat);
+    loop.position.set(s * 0.3, 0.62, 0); loop.rotation.y = Math.PI / 2; loop.rotation.x = s * 0.5; lid.add(loop);
+  });
+  const knot = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 16), ribMat);
+  knot.position.y = 0.5; lid.add(knot);
+
+  /* glow from inside, hidden until opened */
+  const innerLight = new THREE.PointLight(0xffd27a, 0, 18, 1.5);
+  innerLight.position.set(0, 1.5, 0); gift.add(innerLight);
+
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.7, 1.0, 9, 28, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+  beam.position.y = 5.7; scene.add(beam);
+
+  const burstGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture('rgba(255,225,150,1)', 'rgba(255,170,60,0)'), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
+  burstGlow.position.set(0, 1.4, 0); burstGlow.scale.set(1, 1, 1); scene.add(burstGlow);
+
+  gift.scale.setScalar(0.001);
+
+  /* ---------- sparkle burst ---------- */
+  const N = 320;
+  const pPos = new Float32Array(N * 3), pCol = new Float32Array(N * 3), pVel = [];
+  const palette = [new THREE.Color(0xffd98a), new THREE.Color(0xfff0c4), new THREE.Color(0x8fc4ff), new THREE.Color(0xff9a3c)];
+  for (let i = 0; i < N; i++) {
+    pPos[i*3+1] = -50;
+    const c = palette[i % palette.length]; pCol.set([c.r, c.g, c.b], i * 3);
+    pVel.push(new THREE.Vector3());
+  }
+  const pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+  const pMat = new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 1,
+    blending: THREE.AdditiveBlending, depthWrite: false, map: flameTex });
+  scene.add(new THREE.Points(pGeo, pMat));
+
+  /* ambient embers floating off the torches */
+  const E = 40, ePos = new Float32Array(E * 3), eSeed = [];
+  for (let i = 0; i < E; i++) eSeed.push({ x: i % 2 ? 2 : -2, t: Math.random() * 5, s: .4 + Math.random() * .6 });
+  const eGeo = new THREE.BufferGeometry(); eGeo.setAttribute('position', new THREE.BufferAttribute(ePos, 3));
+  scene.add(new THREE.Points(eGeo, new THREE.PointsMaterial({ size: 0.07, color: 0xffa040, map: flameTex,
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+
+  /* ---------- state ---------- */
+  let phase = 'intro';   // intro -> ready -> opening -> opened
+  let openT = 0;
+  let appear = 0;
+  const lidVel = new THREE.Vector3(), lidSpin = new THREE.Vector3();
+  const $ = id => document.getElementById(id);
+
+  setTimeout(() => $('intro').classList.add('show'), 400);
+  setTimeout(() => $('intro').classList.remove('show'), 3800);
+  setTimeout(() => { phase = 'ready'; $('hint').classList.add('show'); }, 4800);
+
+  /* ---------- interaction ---------- */
+  const ray = new THREE.Raycaster(), mouse = new THREE.Vector2();
+  let px = 0, py = 0;
+  function setMouse(e) {
+    mouse.x = (e.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+    px = mouse.x; py = mouse.y;
+  }
+  function hitsGift() {
+    ray.setFromCamera(mouse, camera);
+    return ray.intersectObject(gift, true).length > 0;
+  }
+  addEventListener('pointermove', e => {
+    setMouse(e);
+    if (phase === 'ready') document.body.style.cursor = hitsGift() ? 'pointer' : 'default';
+  });
+  addEventListener('pointerdown', e => {
+    setMouse(e);
+    if (phase === 'ready' && hitsGift()) openGift();
+  });
+
+  function openGift() {
+    phase = 'opening'; openT = 0;
+    document.body.style.cursor = 'default';
+    $('hint').classList.remove('show');
+    lidVel.set(2.2, 7.5, -1.2);
+    lidSpin.set(2.5, 1.2, -3.2);
+    for (let i = 0; i < N; i++) {
+      pPos[i*3] = (Math.random() - .5) * 1.2; pPos[i*3+1] = 1.4; pPos[i*3+2] = (Math.random() - .5) * 1.2;
+      const a = Math.random() * Math.PI * 2, s = 1.5 + Math.random() * 4;
+      pVel[i].set(Math.cos(a) * s * .6, 3 + Math.random() * 6, Math.sin(a) * s * .6);
+    }
+    setTimeout(() => $('reveal').classList.add('show'), 1300);
+  }
+
+  /* ---------- loop ---------- */
+  const clock = new THREE.Clock();
+  function frame() {
+    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+
+    /* ocean waves */
+    const pa = oceanGeo.attributes.position;
+    for (let i = 0; i < pa.count; i++) {
+      const x = oceanBase[i*3], z = oceanBase[i*3+2];
+      pa.array[i*3+1] = Math.sin(x * .22 + t * .9) * .22 + Math.cos(z * .3 + t * .7) * .2 + Math.sin((x + z) * .5 + t * 1.4) * .06;
+    }
+    pa.needsUpdate = true; oceanGeo.computeVertexNormals();
+    moonPath.material.opacity = 0.75 + Math.sin(t * 2) * 0.1;
+
+    /* torches flicker */
+    torches.forEach(o => {
+      const f = 0.75 + Math.sin(t * 13 + o.seed) * .12 + Math.sin(t * 29 + o.seed * 2) * .1 + Math.random() * .08;
+      o.light.intensity = 2.2 * f;
+      const s = 1.0 + f * .55;
+      o.flame.scale.set(s, s * 1.5, 1);
+    });
+    for (let i = 0; i < E; i++) {
+      const e = eSeed[i]; const k = (t * e.s + e.t) % 4;
+      ePos[i*3] = e.x + Math.sin(k * 2 + i) * .35; ePos[i*3+1] = 2.1 + k * .9; ePos[i*3+2] = -0.5 + Math.cos(k * 1.6 + i) * .25;
+    }
+    eGeo.attributes.position.needsUpdate = true;
+
+    /* gift appear */
+    if (phase !== 'intro' || t > 3.6) appear = Math.min(1, appear + dt * .9);
+    const ease = 1 - Math.pow(1 - appear, 3);
+    gift.scale.setScalar(Math.max(0.001, ease));
+    gift.position.y = (1 - ease) * -1.2 + (phase === 'ready' || phase === 'intro' ? Math.sin(t * 1.6) * .04 : 0);
+
+    /* shaking */
+    if (phase === 'ready' || phase === 'intro') {
+      const cyc = t % 2.6;
+      const k = cyc < 1.0 ? Math.sin(cyc * Math.PI) : 0;
+      gift.rotation.z = Math.sin(t * 46) * 0.085 * k;
+      gift.rotation.x = Math.cos(t * 41) * 0.045 * k;
+      lid.position.y = 1.25 + Math.abs(Math.sin(t * 40)) * .06 * k;
+      lid.rotation.z = Math.sin(t * 52) * .04 * k;
+    }
+
+    /* opening sequence */
+    if (phase === 'opening' || phase === 'opened') {
+      openT += dt;
+      gift.rotation.set(0, 0, 0);
+      if (lid.position.y > 0.6 || openT < 0.5) {
+        lidVel.y -= 14 * dt;
+        lid.position.addScaledVector(lidVel, dt);
+        lid.rotation.x += lidSpin.x * dt; lid.rotation.y += lidSpin.y * dt; lid.rotation.z += lidSpin.z * dt;
+        const floorY = 0.2 - gift.position.y;
+        if (lid.position.y < floorY && lidVel.y < 0 && lid.position.x > 1.2) {
+          lid.position.y = floorY; lidVel.set(0, 0, 0); lidSpin.set(0, 0, 0);
+          lid.rotation.x = 0.25; lid.rotation.z = -0.15;
+        }
+      }
+      innerLight.intensity = Math.min(5, openT * 8);
+      beam.material.opacity = Math.min(.28, openT * .5) * (0.85 + Math.sin(t * 6) * .15);
+      beam.rotation.y += dt * .3;
+      burstGlow.material.opacity = Math.max(0, 1 - openT * .9);
+      const gs = 3 + openT * 9; burstGlow.scale.set(gs, gs, 1);
+
+      for (let i = 0; i < N; i++) {
+        pVel[i].y -= 4.5 * dt;
+        pPos[i*3] += pVel[i].x * dt; pPos[i*3+1] += pVel[i].y * dt; pPos[i*3+2] += pVel[i].z * dt;
+        if (pPos[i*3+1] < 0.1 && pVel[i].y < 0) { pVel[i].multiplyScalar(0.3); pVel[i].y = Math.abs(pVel[i].y) * .4; pPos[i*3+1] = 0.1; }
+      }
+      pGeo.attributes.position.needsUpdate = true;
+      pMat.opacity = Math.max(0, 1 - Math.max(0, openT - 2.5) / 3);
+      if (openT > 2) phase = 'opened';
+    }
+
+    /* camera: gentle sway + push in on open */
+    const push = (phase === 'opening' || phase === 'opened') ? Math.min(1, openT / 1.5) : 0;
+    const tz = (innerWidth < innerHeight ? 10.5 : 8) - push * 1.8, ty = 2.3 - push * .3;
+    camera.position.x += ((px * 0.8 + Math.sin(t * .2) * .25) - camera.position.x) * .03;
+    camera.position.y += ((ty + py * .3) - camera.position.y) * .03;
+    camera.position.z += (tz - camera.position.z) * .04;
+    camera.lookAt(lookTarget);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    camera.position.z = innerWidth < innerHeight ? 10.5 : 8;
+  });
+  if (innerWidth < innerHeight) camera.position.z = 10.5;
+})();
+</script>
+</body>
+</html>
